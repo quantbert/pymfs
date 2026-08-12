@@ -35,7 +35,7 @@ pip install "pymfs[datasets]"
 pip install "pymfs[all]"
 ```
 
-Use Python 3.14 or newer.
+Use Python 3.12 or newer.
 
 ## Core Model
 
