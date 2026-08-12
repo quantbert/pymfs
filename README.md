@@ -316,13 +316,13 @@ Use this layout for each local or remote store root:
 ```text
 store/
 ├── catalog.json
-├── measurements/
+├── ohlcv/
 │   ├── metadata.json
 │   ├── year=2023/
 │   │   └── data.parquet
 │   └── year=2024/
 │       └── data.parquet
-└── stations/
+└── symbols/
   ├── metadata.json
   └── data.parquet
 ```
@@ -333,9 +333,9 @@ file. It must not contain `{year}`. A time-series template can name one file per
 partition or use a filename wildcard when a partition contains multiple Parquet files.
 
 ```text
-measurements/year={year}/data.parquet
-measurements/year={year}/*.parquet
-stations/data.parquet
+ohlcv/year={year}/data.parquet
+ohlcv/year={year}/*.parquet
+symbols/data.parquet
 ```
 
 All paths are relative to the store root. Use the same path convention for local
