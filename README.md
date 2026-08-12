@@ -27,10 +27,9 @@ uv add pymps
 from pymfs import FeatureStore
 ```
 
-Install an optional dependency when you need pandas or Hugging Face Datasets output:
+Install an optional dependency when you need Hugging Face Datasets output:
 
 ```bash
-pip install "pymfs[pandas]"
 pip install "pymfs[datasets]"
 pip install "pymfs[all]"
 ```

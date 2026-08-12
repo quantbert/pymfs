@@ -37,7 +37,7 @@ upload: ## Upload the generated feature store to Hugging Face
 		--data "$(DATA_DIRECTORY)" $(DRY_RUN_FLAG)
 
 demo: ## Run the remote cache and query example
-	uv run --env-file .env --extra pandas python demo.py
+	uv run --env-file .env python demo.py
 
 clean: ## Remove generated data and the feature cache
 	rm -rf "$(DATA_DIRECTORY)" feature_cache

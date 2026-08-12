@@ -9,7 +9,7 @@ install: ## Create/sync the environment (incl. dev deps)
 	uv sync
 
 test: ## Run the test suite
-	uv run pytest -q
+	uv run --group test --group generation pytest -q
 
 docs: ## Placeholder for future documentation tooling
 	@echo "Documentation tooling is not configured yet."

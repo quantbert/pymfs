@@ -948,11 +948,12 @@ wheels = [
 
 [[package]]
 name = "pymfs"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "huggingface-hub" },
+    { name = "pandas" },
     { name = "pyarrow" },
     { name = "pytz" },
 ]
@@ -960,13 +961,9 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "datasets" },
-    { name = "pandas" },
 ]
 datasets = [
     { name = "datasets" },
-]
-pandas = [
-    { name = "pandas" },
 ]
 
 [package.dev-dependencies]
@@ -976,7 +973,6 @@ generation = [
 ]
 test = [
     { name = "datasets" },
-    { name = "pandas" },
     { name = "pytest" },
 ]
 
@@ -986,12 +982,11 @@ requires-dist = [
     { name = "datasets", marker = "extra == 'datasets'", specifier = ">=5.0.1" },
     { name = "duckdb", specifier = ">=1.5.5" },
     { name = "huggingface-hub", specifier = ">=1.27.0" },
-    { name = "pandas", marker = "extra == 'all'", specifier = ">=3" },
-    { name = "pandas", marker = "extra == 'pandas'", specifier = ">=3" },
+    { name = "pandas", specifier = ">=3" },
     { name = "pyarrow", specifier = ">=25.0.0" },
     { name = "pytz", specifier = ">=2025.2" },
 ]
-provides-extras = ["pandas", "datasets", "all"]
+provides-extras = ["datasets", "all"]
 
 [package.metadata.requires-dev]
 generation = [
@@ -1000,7 +995,6 @@ generation = [
 ]
 test = [
     { name = "datasets", specifier = ">=5.0.1" },
-    { name = "pandas", specifier = ">=3" },
     { name = "pytest", specifier = ">=8.4" },
 ]
 

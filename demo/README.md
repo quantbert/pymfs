@@ -113,7 +113,7 @@ rebuilds the catalog and the generated dataset card before it transfers files.
 Run the remote cache and query example from this directory:
 
 ```bash
-uv run --env-file .env --extra pandas python demo.py
+uv run --env-file .env python demo.py
 ```
 
 The example reads `HF_DESTINATION` and `HF_TOKEN` from the environment. It stores
