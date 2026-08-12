@@ -20,7 +20,7 @@ registry, or ingestion control plane. A store is a catalog plus Parquet files.
 ## Installation
 
 ```bash
-pip install pymfs
+uv add pymps
 ```
 
 ```python

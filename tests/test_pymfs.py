@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -195,9 +196,11 @@ class FeatureStoreTests(unittest.TestCase):
         connection.execute("SET memory_limit = '1 GiB'")
         connection.execute("SET threads = 2")
 
-        memory_limit, threads = connection.execute(
+        settings = connection.execute(
             "SELECT current_setting('memory_limit'), current_setting('threads')"
         ).fetchone()
+        assert settings is not None
+        memory_limit, threads = settings
 
         self.assertEqual(memory_limit, "1.0 GiB")
         self.assertEqual(threads, 2)
@@ -216,7 +219,9 @@ class FeatureStoreTests(unittest.TestCase):
         self.assertEqual(store.features, ("ohlcv:close", "sma:sma10"))
         self.assertEqual(store.filters, {"ticker": ("001",)})
         self.assertEqual(relation.columns, ["datetime", "ticker", "close", "sma10"])
-        self.assertEqual(relation.aggregate("count(*)").fetchone()[0], 2)
+        count = relation.aggregate("count(*)").fetchone()
+        assert count is not None
+        self.assertEqual(count[0], 2)
 
     def test_filters_preserve_values_and_cover_cached_filters(self) -> None:
         self.assertTrue(
@@ -263,7 +268,9 @@ class FeatureStoreTests(unittest.TestCase):
 
         self.assertIn("READ_PARQUET", plan)
         self.assertNotIn("COLUMN_DATA_SCAN", plan)
-        self.assertIsNotNone(query.fetchone()[0])
+        average = query.fetchone()
+        assert average is not None
+        self.assertIsNotNone(average[0])
 
         volume_store = FeatureStore(
             self.fixture_path,
@@ -273,9 +280,9 @@ class FeatureStoreTests(unittest.TestCase):
         )
 
         self.assertEqual(store.features, ("ohlcv:close",))
-        self.assertIsNotNone(
-            volume_store.query("SELECT sum(volume) FROM features").fetchone()[0]
-        )
+        volume = volume_store.query("SELECT sum(volume) FROM features").fetchone()
+        assert volume is not None
+        self.assertIsNotNone(volume[0])
 
     def test_inmemory_materializes_eagerly(self) -> None:
         store = FeatureStore(
@@ -440,6 +447,7 @@ class FeatureStoreTests(unittest.TestCase):
             datetime(2009, 12, 31, 23, 59, tzinfo=UTC),
             datetime(2025, 1, 1, tzinfo=UTC),
         )
+        assert interval is not None
         self.assertEqual(interval[0], datetime(2010, 1, 4, 8, 0, tzinfo=UTC))
         self.assertEqual(interval[1], datetime(2024, 12, 30, 16, 29, 0, 1, tzinfo=UTC))
 
@@ -520,7 +528,9 @@ class FeatureStoreTests(unittest.TestCase):
         relation = store.connection().table("features")
         plan = relation.explain()
 
-        self.assertEqual(relation.aggregate("count(*)").fetchone()[0], 2)
+        count = relation.aggregate("count(*)").fetchone()
+        assert count is not None
+        self.assertEqual(count[0], 2)
         self.assertNotIn("READ_PARQUET", plan)
         self.assertNotIn("ASOF_JOIN", plan)
 
@@ -606,16 +616,14 @@ class FeatureStoreTests(unittest.TestCase):
                     "hf://datasets/owner/store/markets/data.parquet": remote_markets,
                 }
             )
-            original_filesystem = FeatureStore._huggingface_filesystem
-            FeatureStore._huggingface_filesystem = lambda self: filesystem
-            try:
+            with patch.object(
+                FeatureStore, "_huggingface_filesystem", lambda _: filesystem
+            ):
                 store = FeatureStore(
                     "hf://datasets/owner/store",
                     cache=cache,
                     catalog_path=catalog_path,
                 )
-            finally:
-                FeatureStore._huggingface_filesystem = original_filesystem
             store.show_progress = False
 
             rows = store.query("SELECT * FROM symbology").fetchall()
@@ -783,7 +791,9 @@ class FeatureStoreTests(unittest.TestCase):
             "WHERE datetime >= TIMESTAMPTZ '2024-01-02T08:01:00Z' "
             "AND datetime < TIMESTAMPTZ '2024-01-02T08:03:00Z'"
         )
-        self.assertEqual(relation.aggregate("count(*)").fetchone()[0], 2)
+        count = relation.aggregate("count(*)").fetchone()
+        assert count is not None
+        self.assertEqual(count[0], 2)
 
     def test_native_arrow_batch_reader(self) -> None:
         store = self.configured_store(

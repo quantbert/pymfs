@@ -7,14 +7,19 @@ SEED ?= 42
 OVERWRITE ?= false
 DRY_RUN ?= false
 
+.DEFAULT_GOAL := help
+
 OVERWRITE_FLAG := $(if $(filter true 1 yes,$(OVERWRITE)),--overwrite,)
 DRY_RUN_FLAG := $(if $(filter true 1 yes,$(DRY_RUN)),--dry-run,)
 
-.PHONY: data generate upload demo clean
+.PHONY: help data generate upload demo clean
 
-data: generate upload
+help: ## Show available targets
+	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-20s %s\n", $$1, $$2}'
 
-generate:
+data: generate upload ## Generate and upload the complete feature store
+
+generate: ## Generate local sample data and metadata
 	uv run --group generation python gendata.py \
 		--output "$(DATA_DIRECTORY)/ohlcv" \
 		--start "$(START_DATE)" \
@@ -27,12 +32,12 @@ generate:
 		--symbology-output "$(DATA_DIRECTORY)/symbols/data.parquet" \
 		--markets-output "$(DATA_DIRECTORY)/markets/data.parquet" $(OVERWRITE_FLAG)
 
-upload:
+upload: ## Upload the generated feature store to Hugging Face
 	uv run --env-file .env python hfupload.py \
 		--data "$(DATA_DIRECTORY)" $(DRY_RUN_FLAG)
 
-demo:
+demo: ## Run the remote cache and query example
 	uv run --env-file .env --extra pandas python demo.py
 
-clean:
+clean: ## Remove generated data and the feature cache
 	rm -rf "$(DATA_DIRECTORY)" feature_cache

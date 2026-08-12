@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Literal, Sequence
+from typing import Any, BinaryIO, Literal, Sequence, cast
 from uuid import uuid4
 
 import duckdb
@@ -84,9 +84,10 @@ class FeatureStore:
             raise TypeError("inmemory must be a boolean")
         self.token = token
         self.catalog_path = Path(catalog_path) if catalog_path is not None else None
-        self._catalog: dict[str, Any] | None = None
-        self._feature_entries: dict[str, dict[str, Any]] | None = None
-        self._dataset_entries: dict[str, dict[str, Any]] | None = None
+        self._catalog: dict[str, Any] = {}
+        self._feature_entries: dict[str, dict[str, Any]] = {}
+        self._dataset_entries: dict[str, dict[str, Any]] = {}
+        self._catalog_loaded = False
         self._dataset_metadata: dict[str, dict[str, Any]] = {}
         self._connection: duckdb.DuckDBPyConnection | None = None
         self._filesystem: HfFileSystem | None = None
@@ -129,6 +130,7 @@ class FeatureStore:
         if any(value is not None for value in selection_arguments):
             if not all(value is not None for value in selection_arguments):
                 raise ValueError("features, start, and end must be provided together")
+            assert features is not None and start is not None and end is not None
             self._configure_features(
                 features,
                 start=start,
@@ -183,7 +185,7 @@ class FeatureStore:
         return self._catalog
 
     def _load_catalog(self) -> None:
-        if self._catalog is not None:
+        if self._catalog_loaded:
             return
 
         candidates: list[Path] = []
@@ -247,6 +249,7 @@ class FeatureStore:
         self._catalog = catalog
         self._feature_entries = feature_entries
         self._dataset_entries = dataset_index
+        self._catalog_loaded = True
         if (
             self._cache_store is not None
             and catalog_path != self._cache_store / "catalog.json"
@@ -287,12 +290,15 @@ class FeatureStore:
             self._apply_cache_settings()
 
     def _apply_cache_settings(self) -> None:
+        connection = self._connection
+        if connection is None:
+            return
         cache_enabled = "false" if self._disable_cache else "true"
-        self._connection.execute(f"SET enable_external_file_cache = {cache_enabled}")
+        connection.execute(f"SET enable_external_file_cache = {cache_enabled}")
         if self._disable_cache:
-            self._connection.execute("SET enable_http_metadata_cache = false")
-            self._connection.execute("SET enable_object_cache = false")
-            self._connection.execute("SET parquet_metadata_cache = false")
+            connection.execute("SET enable_http_metadata_cache = false")
+            connection.execute("SET enable_object_cache = false")
+            connection.execute("SET parquet_metadata_cache = false")
 
     @property
     def show_progress(self) -> bool:
@@ -308,10 +314,13 @@ class FeatureStore:
             self._apply_progress_settings()
 
     def _apply_progress_settings(self) -> None:
+        connection = self._connection
+        if connection is None:
+            return
         enabled = "true" if self._show_progress else "false"
-        self._connection.execute(f"SET enable_progress_bar = {enabled}")
-        self._connection.execute(f"SET enable_progress_bar_print = {enabled}")
-        self._connection.execute("SET progress_bar_time = 0")
+        connection.execute(f"SET enable_progress_bar = {enabled}")
+        connection.execute(f"SET enable_progress_bar_print = {enabled}")
+        connection.execute("SET progress_bar_time = 0")
 
     def _connect(self) -> duckdb.DuckDBPyConnection:
         if self._connection is None:
@@ -319,7 +328,9 @@ class FeatureStore:
             self._connection.execute("SET TimeZone = 'UTC'")
             self._apply_cache_settings()
             self._apply_progress_settings()
-        return self._connection
+        connection = self._connection
+        assert connection is not None
+        return connection
 
     def _enable_remote(self) -> duckdb.DuckDBPyConnection:
         connection = self._connect()
@@ -386,7 +397,10 @@ class FeatureStore:
         return json.loads(manifest_path.read_text(encoding="utf-8"))["fragments"]
 
     def _write_manifest(self, fragments: list[dict[str, Any]]) -> None:
-        manifest_path = self._cache_store / "manifest.json"
+        cache_store = self._cache_store
+        if cache_store is None:
+            raise RuntimeError("Cannot write a manifest without a configured cache")
+        manifest_path = cache_store / "manifest.json"
         temporary_path = manifest_path.with_suffix(".json.tmp")
         temporary_path.write_text(
             json.dumps({"version": 1, "fragments": fragments}, indent=2) + "\n",
@@ -409,7 +423,7 @@ class FeatureStore:
             None,
         )
         store = self._source_path if self._source_is_cache else self._cache_store
-        if snapshot is not None:
+        if snapshot is not None and store is not None:
             snapshot_path = store / snapshot["path"]
             if snapshot_path.is_file():
                 return snapshot_path
@@ -431,7 +445,7 @@ class FeatureStore:
         try:
             with self._huggingface_filesystem().open(source_path, "rb") as source_file:
                 with temporary_destination.open("wb") as destination_file:
-                    shutil.copyfileobj(source_file, destination_file)
+                    shutil.copyfileobj(cast(BinaryIO, source_file), destination_file)
             temporary_destination.replace(destination)
         except BaseException:
             temporary_destination.unlink(missing_ok=True)
@@ -546,6 +560,9 @@ class FeatureStore:
         end: datetime,
         filters: dict[str, list[str]] | None,
     ) -> list[dict[str, Any]]:
+        cache_store = self._cache_store
+        if cache_store is None:
+            raise RuntimeError("Cannot cache features without a configured cache")
         fragments = self._read_manifest()
         for dataset, dataset_features in grouped_features.items():
             dataset_entry = self._dataset_entries[dataset]
@@ -563,7 +580,7 @@ class FeatureStore:
                     if entry["dataset"] == dataset
                     and feature_name in entry["features"]
                     and self._covers_filters(entry, filters)
-                    and (self._cache_store / entry["path"]).exists()
+                    and (cache_store / entry["path"]).exists()
                 ]
                 missing_by_feature.extend(
                     self._missing_intervals(available_start, available_end, covered)
@@ -576,7 +593,7 @@ class FeatureStore:
                     / f"part-{missing_start:%Y%m%dT%H%M%S}-{missing_end:%Y%m%dT%H%M%S}"
                     f"-{uuid4().hex[:8]}.parquet"
                 )
-                destination = self._cache_store / relative_path
+                destination = cache_store / relative_path
                 temporary_destination = destination.with_suffix(".parquet.tmp")
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 paths = self._remote_paths(dataset, missing_start, missing_end)
@@ -844,6 +861,7 @@ class FeatureStore:
         """Configure the immutable feature slice and ensure its coverage is local."""
         if self.alignment is None:
             raise TypeError("alignment is required when features are configured")
+        alignment = cast(Literal["exact", "point_in_time"], self.alignment)
         resolved_features = self._resolve_features(requested_features)
         start_timestamp = parse_timestamp(start)
         end_timestamp = parse_timestamp(end)
@@ -879,7 +897,7 @@ class FeatureStore:
             start_timestamp=start_timestamp,
             end_timestamp=end_timestamp,
             filters=normalized_filters,
-            alignment=self.alignment,
+            alignment=alignment,
         )
         if self.inmemory:
             if self.show_progress:
@@ -955,6 +973,7 @@ class FeatureStore:
             )
         else:
             fragments = []
+        fragment_store = self._source_path if self._source_is_cache else self._cache_store
 
         read_start_sql = quote_sql(read_start.isoformat())
         end_sql = quote_sql(end_timestamp.isoformat())
@@ -968,7 +987,7 @@ class FeatureStore:
             if not fragments:
                 paths = self._remote_paths(dataset, read_start, end_timestamp)
             else:
-                fragment_store = self._source_path if self._source_is_cache else self._cache_store
+                assert fragment_store is not None
                 paths = sorted(
                     {
                         str(fragment_store / entry["path"])
