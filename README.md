@@ -51,8 +51,10 @@ cache and reuse its fragments.
 
 Each time-series feature has a canonical `dataset:feature` reference. Examples are
 `prices:close` and `signals:momentum`. You can use an unqualified name such as `close`
-only when one catalog feature has that name. Use an
-`output_name -> feature_reference` mapping for output aliases.
+only when one catalog feature has that name. Use `signals:*` in a feature sequence to
+select every catalog feature in that group. Wildcards cannot be used in an
+`output_name -> feature_reference` mapping because one alias cannot name multiple
+columns.
 
 Time-series feature selections always cover a half-open interval:
 
@@ -150,13 +152,18 @@ Select features during store construction:
 ```python
 store = FeatureStore(
     source="data",
-    features=["prices:close", "signals:sma50"],
+    features=["prices:close", "signals:*"],
     start="2024-01-01T00:00:00Z",
     end="2025-01-01T00:00:00Z",
     filters={"ticker": ["001"]},
     alignment="exact",
 )
 ```
+
+The `dataset:*` wildcard selects every feature in that catalog group, in catalog
+order. You can mix wildcards and explicit references in the same sequence. Duplicate
+references are included only once. Wildcards are not supported in an alias mapping;
+list explicit references when each output column needs a custom name.
 
 You cannot change this selection after construction. Supply `features`, `start`, and
 `end` together. Create another instance for a different selection:

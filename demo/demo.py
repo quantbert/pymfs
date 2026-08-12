@@ -16,10 +16,7 @@ fs = FeatureStore(
     features=[
         "ohlcv:close",
         "ohlcv:volume",
-        "sma:sma10",
-        "sma:sma20",
-        "sma:sma50",
-        "sma:sma200",
+        "sma:*", # * will include all columns from "sma"
     ],
     #filters={"ticker": ["001", "017"]},
     start="2010-01-01T00:00:00Z",

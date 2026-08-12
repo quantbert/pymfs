@@ -327,6 +327,30 @@ class FeatureStoreTests(unittest.TestCase):
         )
         self.assertEqual(qualified.num_rows, 2)
 
+    def test_feature_group_wildcard_selects_every_catalog_feature(self) -> None:
+        store = self.configured_store(
+            ["ohlcv:*"], alignment="exact", **LOAD_ARGUMENTS
+        )
+
+        self.assertEqual(
+            store.features,
+            (
+                "ohlcv:open",
+                "ohlcv:high",
+                "ohlcv:low",
+                "ohlcv:close",
+                "ohlcv:volume",
+            ),
+        )
+        self.assertEqual(
+            store.connection().table("features").columns,
+            ["datetime", "ticker", "open", "high", "low", "close", "volume"],
+        )
+        with self.assertRaisesRegex(ValueError, r"Unknown feature group: missing:\*"):
+            self.store._resolve_features(["missing:*"])
+        with self.assertRaisesRegex(ValueError, "wildcards cannot have output aliases"):
+            self.store._resolve_features({"all_prices": "ohlcv:*"})
+
     def test_ambiguous_unqualified_reference_lists_choices(self) -> None:
         self.store.catalog()
         self.store._feature_entries["adjusted:close"] = {

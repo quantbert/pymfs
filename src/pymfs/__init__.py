@@ -681,11 +681,28 @@ class FeatureStore:
         else:
             requested_items = [(None, reference) for reference in requested_features]
 
-        resolved_features: list[tuple[str, str, str, str]] = []
-        seen_requests: set[tuple[str, str]] = set()
+        expanded_items: list[tuple[str | None, str]] = []
         for requested_alias, requested_reference in requested_items:
             if not isinstance(requested_reference, str) or not requested_reference:
                 raise ValueError("Feature references must be non-empty strings")
+            if requested_reference.endswith(":*"):
+                if requested_alias is not None:
+                    raise ValueError("Feature wildcards cannot have output aliases")
+                prefix = requested_reference[:-1]
+                matches = [
+                    reference
+                    for reference in feature_entries
+                    if reference.startswith(prefix)
+                ]
+                if not matches:
+                    raise ValueError(f"Unknown feature group: {requested_reference}")
+                expanded_items.extend((None, reference) for reference in matches)
+            else:
+                expanded_items.append((requested_alias, requested_reference))
+
+        resolved_features: list[tuple[str, str, str, str]] = []
+        seen_requests: set[tuple[str, str]] = set()
+        for requested_alias, requested_reference in expanded_items:
             reference = requested_reference
             if ":" not in reference:
                 matches = [
