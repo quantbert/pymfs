@@ -14,8 +14,11 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--data", type=Path, default=Path("data"))
     parser.add_argument(
         "--destination",
-        required=True,
-        help="Target hf://buckets/OWNER/NAME or hf://datasets/OWNER/NAME URI.",
+        default=os.environ.get("HF_DESTINATION"),
+        help=(
+            "Target hf://buckets/OWNER/NAME or hf://datasets/OWNER/NAME URI "
+            "(default: HF_DESTINATION)."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -106,6 +109,8 @@ def main() -> None:
     token = os.environ.get("HF_TOKEN")
     if not token:
         raise ValueError("HF_TOKEN is not set")
+    if not settings.destination:
+        raise ValueError("HF_DESTINATION is not set; pass --destination")
     upload_data(
         data_directory=settings.data,
         destination=settings.destination,

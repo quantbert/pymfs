@@ -4,15 +4,14 @@ import os
 from pathlib import Path
 
 from pymfs import FeatureStore
-from run import required
 
 
 DEMO_DIRECTORY = Path(__file__).resolve().parent
 
 store = FeatureStore(
-    source=required(os.environ, "HF_DESTINATION"),
+    source=os.environ["HF_DESTINATION"],
     cache=DEMO_DIRECTORY / "feature_cache",
-    token=required(os.environ, "HF_TOKEN"),
+    token=os.environ["HF_TOKEN"],
     features=[
         "ohlcv:close",
         "ohlcv:volume",

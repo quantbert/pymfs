@@ -10,33 +10,39 @@ trading or investment decisions.
 
 ## End-To-End Run
 
-Configure the `.env` file. Then, go to this directory and run the pipeline:
+Set `HF_TOKEN` and `HF_DESTINATION` in the ignored `.env` file. Then, go to this
+directory and run the pipeline:
 
 ```bash
 cd demo
 make data
 ```
 
-The `data` target runs `run.py`. The script does these steps:
+The `data` target runs the `generate` and `upload` targets. They do these steps:
 
 1. Generates yearly OHLCV Parquet partitions.
 2. Generates SMA10, SMA20, SMA50, and SMA200 partitions.
 3. Builds catalog version 3, dataset metadata, and the Hugging Face dataset card.
 4. Creates or updates the configured private Hugging Face bucket or dataset.
 
-When `OVERWRITE=false`, the script does not replace existing yearly files. The script
-generates the same data for the same date range, ticker range, and seed.
+By default, generation does not replace existing yearly files. It generates the same
+data for the same date range, ticker range, and seed.
 
 ## Configuration
 
-The Makefile passes the `.env` file in this directory to `uv run --env-file`. Git
-ignores this file.
+The Makefile passes the ignored `.env` file to commands that need Hugging Face
+configuration. Set these values there:
 
 | Setting | Purpose |
 | --- | --- |
 | `HF_DESTINATION` | Target `hf://buckets/OWNER/NAME` or `hf://datasets/OWNER/NAME` URI. |
 | `HF_TOKEN` | Hugging Face token with write access. Never commit this value. |
-| `DATA_DIRECTORY` | Generated store directory, relative to `.env`. |
+
+Generation and run controls are Make variables with defaults:
+
+| Setting | Purpose |
+| --- | --- |
+| `DATA_DIRECTORY` | Generated store directory, relative to this directory. |
 | `START_DATE` | Inclusive ISO 8601 coverage start date. |
 | `END_DATE` | Exclusive ISO 8601 coverage end date. |
 | `TICKER_START` | First numeric ticker identifier. |
@@ -45,8 +51,15 @@ ignores this file.
 | `OVERWRITE` | Controls replacement of existing yearly partitions. |
 | `DRY_RUN` | Prevents the Hugging Face upload when set to `true`. |
 
-When `DRY_RUN=true`, the pipeline generates data. It then rebuilds local metadata. It
-does not write data to the remote store.
+Override settings on the command line. For example, this generates ten tickers and
+previews the upload without writing to the remote store:
+
+```bash
+make data TICKER_COUNT=10 DRY_RUN=true
+```
+
+Use `make generate OVERWRITE=true` to replace existing partitions. Use `make upload`
+to rebuild metadata and upload an already generated store.
 
 ## Individual Commands
 
@@ -103,9 +116,9 @@ Run the remote cache and query example from this directory:
 uv run --env-file .env --extra pandas python demo.py
 ```
 
-The example reads `HF_DESTINATION` and `HF_TOKEN` from the environment populated by
-`uv`. It stores downloaded fragments in `demo/feature_cache`. The launch directory does
-not change the cache location.
+The example reads `HF_DESTINATION` and `HF_TOKEN` from the environment. It stores
+downloaded fragments in `demo/feature_cache`. The launch directory does not change
+the cache location.
 
 ## Testing
 

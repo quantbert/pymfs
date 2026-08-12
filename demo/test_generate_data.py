@@ -14,25 +14,6 @@ from gendata import (
     write_table_dataset,
 )
 from hfupload import parse_destination
-from run import boolean, required
-
-
-class RunConfigurationTests(unittest.TestCase):
-    def test_reads_required_values_and_booleans(self) -> None:
-        environment = {
-            "HF_TOKEN": "secret",
-            "OVERWRITE": "yes",
-            "DRY_RUN": "false",
-        }
-        self.assertEqual(required(environment, "HF_TOKEN"), "secret")
-        self.assertTrue(boolean(environment, "OVERWRITE"))
-        self.assertFalse(boolean(environment, "DRY_RUN"))
-
-    def test_rejects_missing_and_invalid_configuration(self) -> None:
-        with self.assertRaisesRegex(ValueError, "HF_TOKEN is not set"):
-            required({}, "HF_TOKEN")
-        with self.assertRaisesRegex(ValueError, "OVERWRITE must be true or false"):
-            boolean({"OVERWRITE": "sometimes"}, "OVERWRITE")
 
 
 class UploadConfigurationTests(unittest.TestCase):
