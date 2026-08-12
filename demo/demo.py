@@ -9,7 +9,7 @@ from run import required
 
 DEMO_DIRECTORY = Path(__file__).resolve().parent
 
-fs = FeatureStore(
+store = FeatureStore(
     source=required(os.environ, "HF_DESTINATION"),
     cache=DEMO_DIRECTORY / "feature_cache",
     token=required(os.environ, "HF_TOKEN"),
@@ -25,10 +25,10 @@ fs = FeatureStore(
     #alignment="exact", # no alignment, features are returned as-is, which is faster but may result in misaligned features
     #inmemory=True, # load all features into memory, which is faster but may use a lot of RAM
 )
-print(f"Remote feature store: {fs.source}")
-print(f"Local feature cache: {fs.cache_path}")
+print(f"Remote feature store: {store.source}")
+print(f"Local feature cache: {store.cache_path}")
 
-symbols = fs.query(
+symbols = store.query(
     """
     SELECT ticker, company_name, isin, market_code
     FROM symbology
@@ -39,7 +39,7 @@ symbols = fs.query(
 print("Symbology sample:")
 print(symbols.fetchall())
 
-result = fs.query(
+result = store.query(
     """
     SELECT
         features.ticker,
@@ -55,7 +55,7 @@ result = fs.query(
 print("Feature summary with company information:")
 print(result.df())
 
-market_hours = fs.query(
+market_hours = store.query(
     """
     SELECT market_code, weekday, opens_at, closes_at, timezone
     FROM markets
@@ -65,7 +65,7 @@ market_hours = fs.query(
 print("Market hours:")
 print(market_hours.df())
 
-frame = fs.query(
+frame = store.query(
         """
         SELECT * FROM features
         WHERE datetime >= TIMESTAMPTZ '2024-01-02T08:00:00Z'
