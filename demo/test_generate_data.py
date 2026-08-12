@@ -69,7 +69,7 @@ class CatalogTests(unittest.TestCase):
             readme = (data_root / "README.md").read_text(encoding="utf-8")
 
         self.assertEqual(catalog["name"], "owner/store")
-        self.assertEqual(catalog["catalog_version"], 3)
+        self.assertEqual(catalog["catalog_version"], 1)
         self.assertEqual(
             [dataset["name"] for dataset in catalog["datasets"]],
             ["ohlcv", "sma", "symbology", "markets"],

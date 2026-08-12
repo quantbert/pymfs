@@ -372,11 +372,11 @@ have to contain a physical year column.
 
 ### Catalog Contract
 
-The store root must contain `catalog.json`. Catalog version 3 has this structure:
+The store root must contain `catalog.json`. Catalog version 1 has this structure:
 
 ```json
 {
-  "catalog_version": 3,
+  "catalog_version": 1,
   "name": "owner/store",
   "description": "Research datasets",
   "datasets": [
@@ -421,8 +421,8 @@ The store root must contain `catalog.json`. Catalog version 3 has this structure
 
 These requirements apply:
 
-- `catalog_version` must be `3`. The library rejects older catalog versions. It does not
-  migrate them.
+- `catalog_version` must be `1`. The library rejects unsupported catalog versions. It
+  does not migrate them.
 - Every dataset must have kind `timeseries` or `table`.
 - The dataset name `features` is reserved and cannot be used by a table dataset.
 - A time-series dataset must declare `time_column` and `series_keys`. The list of series
@@ -446,7 +446,7 @@ semantic and physical description:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 1,
   "dataset": "prices",
   "kind": "timeseries",
   "description": "Adjusted prices",

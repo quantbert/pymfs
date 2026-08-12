@@ -22,7 +22,7 @@ The `data` target runs the `generate` and `upload` targets. They do these steps:
 
 1. Generates yearly OHLCV Parquet partitions.
 2. Generates SMA10, SMA20, SMA50, and SMA200 partitions.
-3. Builds catalog version 3, dataset metadata, and the Hugging Face dataset card.
+3. Builds catalog version 1, dataset metadata, and the Hugging Face dataset card.
 4. Creates or updates the configured private Hugging Face bucket or dataset.
 
 By default, generation does not replace existing yearly files. It generates the same
@@ -80,7 +80,7 @@ uv run --group generation python gendata.py \
 ```
 
 Use `--overwrite` to replace partitions that an older version generated. Catalog
-version 3 accepts only Parquet time columns with the Arrow timezone `UTC`.
+version 1 accepts only Parquet time columns with the Arrow timezone `UTC`.
 
 Use this command to build catalog metadata and read Parquet partition statistics:
 
@@ -90,7 +90,7 @@ uv run python build_catalog.py --data data \
 	--source hf://buckets/OWNER/NAME
 ```
 
-This command writes catalog version 3 to `catalog.json`. It writes `metadata.json` for
+This command writes catalog version 1 to `catalog.json`. It writes `metadata.json` for
 each dataset. It also writes the generated store `README.md` in the configured data
 directory. The `DATASETS` definition in `build_catalog.py` is the source for dataset and
 feature semantics. Time-series datasets declare `time_column` and `series_keys`. Table

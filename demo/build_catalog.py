@@ -11,7 +11,7 @@ from typing import Any
 import pyarrow.parquet as pq
 
 
-CATALOG_VERSION = 3
+CATALOG_VERSION = 1
 DATASETS: dict[str, dict[str, Any]] = {
     "ohlcv": {
         "kind": "timeseries",
@@ -301,7 +301,7 @@ def render_store_readme(dataset_metadata: list[dict[str, Any]], source: str) -> 
 
 
 def build_catalog(data_root: Path, store_name: str, source: str) -> dict[str, Any]:
-    """Write the version 3 catalog, dataset metadata, and storage README."""
+    """Write the version 1 catalog, dataset metadata, and storage README."""
     dataset_entries: list[dict[str, Any]] = []
     dataset_metadata: list[dict[str, Any]] = []
     feature_index: dict[str, dict[str, Any]] = {}

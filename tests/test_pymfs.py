@@ -74,7 +74,7 @@ class FeatureStoreTests(unittest.TestCase):
             "lookahead_safe": True,
         }
         catalog = {
-            "catalog_version": 3,
+            "catalog_version": 1,
             "name": "test/store",
             "datasets": [
                 {
@@ -666,7 +666,7 @@ class FeatureStoreTests(unittest.TestCase):
             (root / "catalog.json").write_text(
                 json.dumps(
                     {
-                        "catalog_version": 3,
+                        "catalog_version": 1,
                         "datasets": [
                             {
                                 "name": "items",
@@ -738,7 +738,7 @@ class FeatureStoreTests(unittest.TestCase):
             (root / "catalog.json").write_text(
                 json.dumps(
                     {
-                        "catalog_version": 3,
+                        "catalog_version": 1,
                         "datasets": datasets,
                         "features": features,
                     }
@@ -796,8 +796,8 @@ class FeatureStoreTests(unittest.TestCase):
 
         self.assertEqual([batch.num_rows for batch in batches], [1, 1])
 
-    def test_legacy_catalog_versions_are_rejected(self) -> None:
-        for version in (1, 2):
+    def test_unsupported_catalog_versions_are_rejected(self) -> None:
+        for version in (2, 3):
             with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 (root / "catalog.json").write_text(

@@ -204,7 +204,7 @@ class FeatureStore:
 
         catalog = json.loads(catalog_text)
         catalog_version = catalog.get("catalog_version")
-        if catalog_version != 3:
+        if catalog_version != 1:
             raise ValueError(
                 f"Unsupported catalog version: {catalog_version!r}"
             )
