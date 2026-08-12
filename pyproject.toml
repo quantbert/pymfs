@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pymfs"
+version = "0.1.0"
+description = "Python Minimal Time Series Feature Store"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.14"
+dependencies = [
+    "duckdb>=1.5.5",
+    "huggingface-hub>=1.27.0",
+    "pyarrow>=25.0.0",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+pandas = ["pandas>=3"]
+datasets = ["datasets>=5.0.1"]
+all = ["datasets>=5.0.1", "pandas>=3"]
+
+[dependency-groups]
+test = [
+    "datasets>=5.0.1",
+    "pandas>=3",
+    "pytest>=8.4",
+]
+generation = [
+    "exchange-calendars>=4.13.2",
+    "numpy>=2.5.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pymfs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "demo"]
