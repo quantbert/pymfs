@@ -330,6 +330,7 @@ connection = store.connection()
 features = connection.table("features")
 symbols = connection.table("symbology")
 connection.execute("SET memory_limit = '4 GiB'")
+connection.execute("SET temp_directory = '/path/to/duckdb-tmp'")
 connection.execute("SET threads = 4")
 ```
 
@@ -337,7 +338,7 @@ DuckDB scans Parquet when it runs a catalog-table view or a lazy `features` view
 `inmemory=True`, construction runs the feature selection immediately. It stores the
 result in a reusable DuckDB table.
 
-### Outputs And Streaming
+### Outputs And Batching
 
 DuckDB relations convert directly to Arrow or pandas. Hugging Face Datasets accepts the
 Arrow table:
@@ -351,15 +352,26 @@ frame = relation.df()
 dataset = Dataset(relation.to_arrow_table())
 ```
 
-Use the DuckDB Arrow reader to process record batches of a specified size:
+For large feature selections, use `feature_batches()` instead of consuming the complete
+joined relation at once. Each batch is a separate time-bounded alignment query:
 
 ```python
-for batch in store.connection().table("features").to_arrow_reader(batch_size=250_000):
-    process(batch)
+from datetime import timedelta
+
+for batch in store.feature_batches(
+    start="2024-01-01T00:00:00Z",
+    end="2025-01-01T00:00:00Z",
+    columns=["datetime", "ticker", "close", "volume", "sma50"],
+    order_by=["datetime", "ticker"],
+    window=timedelta(days=30),
+):
+    process(batch.to_arrow_table())
 ```
 
-The batch size limits each Python result allocation. DuckDB controls internal query
-memory and disk use.
+Omit `start` and `end` to batch the interval configured during construction. Each
+yielded relation is lazy and aligns only its window when consumed. DuckDB's
+`memory_limit` and `temp_directory` settings control when larger-than-memory work
+spills to disk.
 
 ## Data Specification
 
