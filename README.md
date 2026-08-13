@@ -1,21 +1,27 @@
-# pymfs
+# pymfs (Python Minimal Feature Store)
 
-`pymfs` (Python Minimal Feature Store) is a small Python library for querying Parquet
-time series and general tables with DuckDB. It supports feature selection, local
-caching, cross-dataset joins, point-in-time alignment, streaming, and analytical SQL.
-A store can be in a local directory, a Hugging Face dataset repository, or a Hugging
-Face bucket.
+`pymfs` is a small Python library for retrieving features without the operational
+overhead of hosting yet another service. It reads data from Hugging Face datasets or
+buckets, local storage, and S3-compatible object stores.
+
+It provides the essentials for selecting features and reference data, preparing
+training datasets, and running common analytical queries.
 
 The library is for offline read operations. It does not calculate features. It does not
 provide an online database, ingestion control, or a registry service. Producers and
 `FeatureStore` use the catalog and the Parquet layout as their interface.
 
-`pymfs` removes the operational overhead from feature retrieval. It provides the
-minimum needed to select features and reference data, prepare a training dataset, and
-continue with your work.
+There are no servers to deploy or maintain. A store is a catalog plus Parquet files.
 
-There are no servers to host, configure, or maintain. There is no service deployment,
-registry, or ingestion control plane. A store is a catalog plus Parquet files.
+Features include:
+
+- Feature selection
+- Local caching
+- Cross-dataset joins
+- Point-in-time alignment
+- Streaming
+- Analytical SQL with direct access to DuckDB
+- Lazy feature and table relations with pandas and Arrow output
 
 ## Installation
 
@@ -244,6 +250,48 @@ feature view remains lazy until a query result is consumed.
 
 ## Query Interfaces
 
+### Feature Data
+
+`features()` returns the configured feature selection as a lazy DuckDB relation.
+Use `start` and `end` to narrow its half-open time interval, `columns` to project
+specific columns, and `order_by` when deterministic ordering is needed:
+
+```python
+frame = store.features(
+  start="2024-01-02T08:00:00Z",
+  end="2024-01-02T09:00:00Z",
+  order_by=["datetime", "ticker"],
+).df()
+
+table = store.features(columns=["datetime", "ticker", "close"]).to_arrow_table()
+```
+
+By default, the relation contains the complete feature selection configured during
+construction and preserves DuckDB's natural order. Conversion methods execute the
+lazy relation.
+
+For large selections, `feature_batches()` yields a separate lazy relation for each
+time window. This bounds the data aligned by each query instead of only batching the
+output after alignment:
+
+```python
+from datetime import timedelta
+
+for batch in store.feature_batches(window=timedelta(days=30)):
+  frame = batch.df()
+  train(frame)
+```
+
+Omit `start` and `end` to use the interval configured during construction. The final
+window is shortened to end at the requested limit. You can also pass `columns` and
+`order_by` as with `features()`.
+
+Use `table()` to access a registered catalog table:
+
+```python
+symbols = store.table("symbology").order("ticker")
+```
+
 ### SQL
 
 `query()` runs SQL on the shared DuckDB connection. It returns a
@@ -274,8 +322,8 @@ construction.
 
 ### Native DuckDB
 
-`connection()` returns the shared `DuckDBPyConnection`. Use `table()` for native
-relation operations. You can also configure DuckDB directly:
+`connection()` returns the shared `DuckDBPyConnection`. You can also configure DuckDB
+directly:
 
 ```python
 connection = store.connection()

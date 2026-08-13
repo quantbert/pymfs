@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import perf_counter
@@ -97,7 +97,7 @@ class FeatureStore:
         self.start: datetime | None = None
         self.end: datetime | None = None
         self.filters: dict[str, tuple[str, ...]] | None = None
-        self.features: tuple[str, ...] = ()
+        self._feature_selection: tuple[str, ...] = ()
         self.alignment = self._validate_alignment(alignment)
         self.inmemory = inmemory
 
@@ -207,9 +207,7 @@ class FeatureStore:
         catalog = json.loads(catalog_text)
         catalog_version = catalog.get("catalog_version")
         if catalog_version != 1:
-            raise ValueError(
-                f"Unsupported catalog version: {catalog_version!r}"
-            )
+            raise ValueError(f"Unsupported catalog version: {catalog_version!r}")
         feature_entries = catalog.get("features", {})
         if not isinstance(feature_entries, dict):
             raise ValueError("Catalog features must be a mapping")
@@ -228,11 +226,15 @@ class FeatureStore:
                 raise ValueError(f"Dataset {name!r} has invalid kind: {kind!r}")
             if kind == "timeseries":
                 if not isinstance(entry.get("time_column"), str):
-                    raise ValueError(f"Timeseries dataset {name!r} requires time_column")
+                    raise ValueError(
+                        f"Timeseries dataset {name!r} requires time_column"
+                    )
                 if not isinstance(entry.get("series_keys"), list) or not all(
                     isinstance(key, str) and key for key in entry["series_keys"]
                 ):
-                    raise ValueError(f"Timeseries dataset {name!r} requires series_keys")
+                    raise ValueError(
+                        f"Timeseries dataset {name!r} requires series_keys"
+                    )
             dataset_index[name] = entry
         for reference, entry in feature_entries.items():
             expected_reference = f"{entry['dataset']}:{entry['name']}"
@@ -271,6 +273,11 @@ class FeatureStore:
     def source(self) -> str:
         """Configured authoritative feature-store source."""
         return self._source
+
+    @property
+    def feature_selection(self) -> tuple[str, ...]:
+        """Canonical feature references selected during construction."""
+        return self._feature_selection
 
     def connection(self) -> duckdb.DuckDBPyConnection:
         """Return the local DuckDB connection for additional analytical queries."""
@@ -359,7 +366,9 @@ class FeatureStore:
             document = json.loads(path.read_text(encoding="utf-8"))
         else:
             filesystem = self._huggingface_filesystem()
-            with filesystem.open(f"{self._source}/{metadata_path}", "r") as metadata_file:
+            with filesystem.open(
+                f"{self._source}/{metadata_path}", "r"
+            ) as metadata_file:
                 document = json.loads(metadata_file.read())
             if self._cache_store is not None:
                 local_metadata = self._cache_store / metadata_path
@@ -380,11 +389,15 @@ class FeatureStore:
         entry = self._dataset_entries[dataset]
         path_template = entry.get("path_template")
         if path_template is None:
-            path_template = self._load_dataset_metadata(dataset).get("storage", {}).get(
-                "path_template"
+            path_template = (
+                self._load_dataset_metadata(dataset)
+                .get("storage", {})
+                .get("path_template")
             )
         if not isinstance(path_template, str) or not path_template:
-            raise ValueError(f"Dataset {dataset!r} does not define a storage path_template")
+            raise ValueError(
+                f"Dataset {dataset!r} does not define a storage path_template"
+            )
         return path_template
 
     def _read_manifest(self) -> list[dict[str, Any]]:
@@ -603,7 +616,10 @@ class FeatureStore:
                     for column in (time_column, *series_keys, *dataset_features)
                 )
                 filter_sql = ""
-                parameters: list[Any] = [missing_start.isoformat(), missing_end.isoformat()]
+                parameters: list[Any] = [
+                    missing_start.isoformat(),
+                    missing_end.isoformat(),
+                ]
                 if filters is not None:
                     for column, values in filters.items():
                         placeholders = ", ".join("?" for _ in values)
@@ -843,7 +859,9 @@ class FeatureStore:
                 raise ValueError(f"Feature {reference} is not marked lookahead_safe")
             value = entry.get("availability_delay")
             if value is not None:
-                availability_delays[reference] = parse_availability_delay(value, reference)
+                availability_delays[reference] = parse_availability_delay(
+                    value, reference
+                )
             elif require_safe:
                 raise ValueError(f"Feature {reference} must define availability_delay")
             else:
@@ -875,7 +893,9 @@ class FeatureStore:
             physical_start -= max(delays.values(), default=timedelta())
 
         if self._source_path is None and self._cache_store is None:
-            raise ValueError("remote feature selection requires a configured local cache")
+            raise ValueError(
+                "remote feature selection requires a configured local cache"
+            )
         if self._source_is_cache:
             self._validate_offline_coverage(
                 self._read_manifest(),
@@ -923,11 +943,12 @@ class FeatureStore:
             None
             if normalized_filters is None
             else {
-                column: tuple(values)
-                for column, values in normalized_filters.items()
+                column: tuple(values) for column, values in normalized_filters.items()
             }
         )
-        self.features = tuple(reference for _, reference, _, _ in resolved_features)
+        self._feature_selection = tuple(
+            reference for _, reference, _, _ in resolved_features
+        )
 
     def _relation(
         self,
@@ -973,7 +994,9 @@ class FeatureStore:
             )
         else:
             fragments = []
-        fragment_store = self._source_path if self._source_is_cache else self._cache_store
+        fragment_store = (
+            self._source_path if self._source_is_cache else self._cache_store
+        )
 
         read_start_sql = quote_sql(read_start.isoformat())
         end_sql = quote_sql(end_timestamp.isoformat())
@@ -1047,8 +1070,7 @@ class FeatureStore:
                         f" AND {quote_identifier(column)} IN ({filter_values})"
                     )
             columns = ", ".join(
-                quote_identifier(column)
-                for column in (*key_columns, *dataset_features)
+                quote_identifier(column) for column in (*key_columns, *dataset_features)
             )
             if empty_family:
                 ctes.append(
@@ -1151,4 +1173,98 @@ class FeatureStore:
         """Query registered catalog tables and the optional active feature slice."""
         return self._connect().sql(sql)
 
+    def table(self, name: str) -> duckdb.DuckDBPyRelation:
+        """Return a registered catalog table as a lazy DuckDB relation."""
+        if not isinstance(name, str) or not name:
+            raise ValueError("table name must be a non-empty string")
+        return self._connect().table(name)
 
+    def features(
+        self,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        columns: Sequence[str] | None = None,
+        order_by: Sequence[str] | None = None,
+    ) -> duckdb.DuckDBPyRelation:
+        """Return the configured feature selection as a lazy DuckDB relation."""
+        if not self._feature_selection:
+            raise ValueError("FeatureStore has no configured feature selection")
+
+        relation = self.table("features")
+        grouped_features = self._group_features(
+            self._resolve_features(self._feature_selection)
+        )
+        time_column, _ = self._timeseries_keys(grouped_features)
+        predicates: list[str] = []
+        if start is not None:
+            start_timestamp = parse_timestamp(start)
+            predicates.append(
+                f"{quote_identifier(time_column)} >= "
+                f"TIMESTAMPTZ '{quote_sql(start_timestamp.isoformat())}'"
+            )
+        if end is not None:
+            end_timestamp = parse_timestamp(end)
+            predicates.append(
+                f"{quote_identifier(time_column)} < "
+                f"TIMESTAMPTZ '{quote_sql(end_timestamp.isoformat())}'"
+            )
+        if predicates:
+            relation = relation.filter(" AND ".join(predicates))
+
+        if columns is not None:
+            selected_columns = self._relation_columns(columns, "columns")
+            relation = relation.project(
+                ", ".join(quote_identifier(column) for column in selected_columns)
+            )
+        if order_by is not None:
+            ordering_columns = self._relation_columns(order_by, "order_by")
+            relation = relation.order(
+                ", ".join(quote_identifier(column) for column in ordering_columns)
+            )
+        return relation
+
+    def feature_batches(
+        self,
+        *,
+        window: timedelta,
+        start: str | None = None,
+        end: str | None = None,
+        columns: Sequence[str] | None = None,
+        order_by: Sequence[str] | None = None,
+    ) -> Iterator[duckdb.DuckDBPyRelation]:
+        """Yield lazy feature relations over consecutive time windows."""
+        if not self._feature_selection:
+            raise ValueError("FeatureStore has no configured feature selection")
+        if not isinstance(window, timedelta):
+            raise TypeError("window must be a datetime.timedelta")
+        if window <= timedelta():
+            raise ValueError("window must be positive")
+
+        start_timestamp = parse_timestamp(start) if start is not None else self.start
+        end_timestamp = parse_timestamp(end) if end is not None else self.end
+        assert start_timestamp is not None and end_timestamp is not None
+        if end_timestamp <= start_timestamp:
+            raise ValueError("end must be later than start")
+
+        batch_start = start_timestamp
+        while batch_start < end_timestamp:
+            batch_end = min(batch_start + window, end_timestamp)
+            yield self.features(
+                start=batch_start.isoformat(),
+                end=batch_end.isoformat(),
+                columns=columns,
+                order_by=order_by,
+            )
+            batch_start = batch_end
+
+    @staticmethod
+    def _relation_columns(columns: Sequence[str], argument: str) -> tuple[str, ...]:
+        if isinstance(columns, (str, bytes)) or not isinstance(columns, Sequence):
+            raise TypeError(f"{argument} must be a sequence of column names")
+        normalized = tuple(columns)
+        if not normalized or not all(
+            isinstance(column, str) and column for column in normalized
+        ):
+            raise ValueError(f"{argument} must contain non-empty column names")
+        return normalized

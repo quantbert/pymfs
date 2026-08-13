@@ -30,8 +30,7 @@ class FeatureStoreTests(unittest.TestCase):
         cls.fixture_directory = tempfile.TemporaryDirectory()
         cls.fixture_path = Path(cls.fixture_directory.name)
         timestamps = [
-            datetime(2024, 1, 2, 8, minute, tzinfo=UTC)
-            for minute in range(3)
+            datetime(2024, 1, 2, 8, minute, tzinfo=UTC) for minute in range(3)
         ]
         cls._write_family(
             "ohlcv",
@@ -151,8 +150,7 @@ class FeatureStoreTests(unittest.TestCase):
                 (self.fixture_path / "catalog.json").read_text(encoding="utf-8")
             )
             catalog["datasets"] = [
-                entry for entry in catalog["datasets"]
-                if entry["kind"] == "timeseries"
+                entry for entry in catalog["datasets"] if entry["kind"] == "timeseries"
             ]
             (Path(directory) / "catalog.json").write_text(
                 json.dumps(catalog), encoding="utf-8"
@@ -216,7 +214,7 @@ class FeatureStoreTests(unittest.TestCase):
 
         relation = store.connection().table("features")
 
-        self.assertEqual(store.features, ("ohlcv:close", "sma:sma10"))
+        self.assertEqual(store.feature_selection, ("ohlcv:close", "sma:sma10"))
         self.assertEqual(store.filters, {"ticker": ("001",)})
         self.assertEqual(relation.columns, ["datetime", "ticker", "close", "sma10"])
         count = relation.aggregate("count(*)").fetchone()
@@ -231,9 +229,7 @@ class FeatureStoreTests(unittest.TestCase):
             )
         )
         self.assertFalse(
-            FeatureStore._covers_filters(
-                {"filters": {"ticker": ["001"]}}, None
-            )
+            FeatureStore._covers_filters({"filters": {"ticker": ["001"]}}, None)
         )
         store = FeatureStore(
             self.fixture_path,
@@ -279,10 +275,97 @@ class FeatureStoreTests(unittest.TestCase):
             **LOAD_ARGUMENTS,
         )
 
-        self.assertEqual(store.features, ("ohlcv:close",))
+        self.assertEqual(store.feature_selection, ("ohlcv:close",))
         volume = volume_store.query("SELECT sum(volume) FROM features").fetchone()
         assert volume is not None
         self.assertIsNotNone(volume[0])
+
+    def test_features_returns_lazy_narrowed_relation(self) -> None:
+        store = FeatureStore(
+            source=self.fixture_path,
+            features=["ohlcv:close", "ohlcv:volume"],
+            alignment="exact",
+            **LOAD_ARGUMENTS,
+        )
+
+        relation = store.features(
+            start="2024-01-02T08:01:00Z",
+            end="2024-01-02T08:02:00Z",
+            columns=["ticker", "datetime", "close"],
+            order_by=["datetime", "ticker"],
+        )
+
+        self.assertEqual(relation.columns, ["ticker", "datetime", "close"])
+        self.assertEqual(
+            relation.fetchall(),
+            [("001", datetime(2024, 1, 2, 8, 1, tzinfo=UTC), 101.5)],
+        )
+        self.assertIn("READ_PARQUET", relation.explain())
+
+    def test_features_requires_configured_selection(self) -> None:
+        with self.assertRaisesRegex(ValueError, "no configured feature selection"):
+            self.store.features()
+
+    def test_feature_batches_yields_bounded_lazy_relations(self) -> None:
+        store = FeatureStore(
+            source=self.fixture_path,
+            features=["ohlcv:close", "ohlcv:volume"],
+            alignment="exact",
+            **LOAD_ARGUMENTS,
+        )
+
+        batches = list(
+            store.feature_batches(
+                window=timedelta(minutes=1),
+                end="2024-01-02T08:01:30Z",
+                columns=["datetime", "ticker", "close"],
+                order_by=["datetime", "ticker"],
+            )
+        )
+
+        self.assertEqual(len(batches), 2)
+        self.assertEqual(
+            [batch.columns for batch in batches],
+            [
+                ["datetime", "ticker", "close"],
+                ["datetime", "ticker", "close"],
+            ],
+        )
+        self.assertEqual(
+            [batch.fetchall() for batch in batches],
+            [
+                [(datetime(2024, 1, 2, 8, 0, tzinfo=UTC), "001", 100.5)],
+                [(datetime(2024, 1, 2, 8, 1, tzinfo=UTC), "001", 101.5)],
+            ],
+        )
+        self.assertTrue(all("READ_PARQUET" in batch.explain() for batch in batches))
+
+    def test_feature_batches_validates_window_and_interval(self) -> None:
+        store = FeatureStore(
+            source=self.fixture_path,
+            features=["ohlcv:close"],
+            alignment="exact",
+            **LOAD_ARGUMENTS,
+        )
+
+        with self.assertRaisesRegex(TypeError, "datetime.timedelta"):
+            list(store.feature_batches(window=1))
+        with self.assertRaisesRegex(ValueError, "window must be positive"):
+            list(store.feature_batches(window=timedelta()))
+        with self.assertRaisesRegex(ValueError, "end must be later"):
+            list(
+                store.feature_batches(
+                    window=timedelta(days=1),
+                    start="2024-01-03T00:00:00Z",
+                    end="2024-01-02T00:00:00Z",
+                )
+            )
+
+    def test_table_returns_registered_table_relation(self) -> None:
+        relation = self.store.table("symbology")
+
+        self.assertEqual(relation.columns, ["ticker", "company_name"])
+        self.assertEqual(relation.fetchall(), [("001", "Example Company 001")])
 
     def test_inmemory_materializes_eagerly(self) -> None:
         store = FeatureStore(
@@ -315,9 +398,7 @@ class FeatureStoreTests(unittest.TestCase):
         return store.connection().table("features").to_arrow_table()
 
     def test_qualified_unqualified_and_aliased_references(self) -> None:
-        qualified = self.arrow_table(
-            ["ohlcv:close", "sma:sma10"], **LOAD_ARGUMENTS
-        )
+        qualified = self.arrow_table(["ohlcv:close", "sma:sma10"], **LOAD_ARGUMENTS)
         unqualified = self.arrow_table(["close"], **LOAD_ARGUMENTS)
         aliased = self.arrow_table(
             {"raw_close": "ohlcv:close", "average": "sma:sma10"},
@@ -335,12 +416,10 @@ class FeatureStoreTests(unittest.TestCase):
         self.assertEqual(qualified.num_rows, 2)
 
     def test_feature_group_wildcard_selects_every_catalog_feature(self) -> None:
-        store = self.configured_store(
-            ["ohlcv:*"], alignment="exact", **LOAD_ARGUMENTS
-        )
+        store = self.configured_store(["ohlcv:*"], alignment="exact", **LOAD_ARGUMENTS)
 
         self.assertEqual(
-            store.features,
+            store.feature_selection,
             (
                 "ohlcv:open",
                 "ohlcv:high",
@@ -372,9 +451,11 @@ class FeatureStoreTests(unittest.TestCase):
             self.store._resolve_features(["close"])
 
     def test_output_formats(self) -> None:
-        relation = self.configured_store(
-            ["ohlcv:close"], alignment="exact", **LOAD_ARGUMENTS
-        ).connection().table("features")
+        relation = (
+            self.configured_store(["ohlcv:close"], alignment="exact", **LOAD_ARGUMENTS)
+            .connection()
+            .table("features")
+        )
         arrow_table = relation.to_arrow_table()
         pandas_frame = relation.df()
         dataset = Dataset(relation.to_arrow_table())
@@ -386,12 +467,20 @@ class FeatureStoreTests(unittest.TestCase):
 
     def test_point_in_time_alignment_respects_availability_delay(self) -> None:
         features = ["ohlcv:open", "ohlcv:close", "sma:sma10"]
-        exact = self.configured_store(
-            features, alignment="exact", **LOAD_ARGUMENTS
-        ).connection().table("features").order("datetime, ticker").to_arrow_table()
-        aligned = self.configured_store(
-            features, alignment="point_in_time", **LOAD_ARGUMENTS
-        ).connection().table("features").order("datetime, ticker").to_arrow_table()
+        exact = (
+            self.configured_store(features, alignment="exact", **LOAD_ARGUMENTS)
+            .connection()
+            .table("features")
+            .order("datetime, ticker")
+            .to_arrow_table()
+        )
+        aligned = (
+            self.configured_store(features, alignment="point_in_time", **LOAD_ARGUMENTS)
+            .connection()
+            .table("features")
+            .order("datetime, ticker")
+            .to_arrow_table()
+        )
 
         self.assertEqual(aligned.num_rows, exact.num_rows)
         self.assertEqual(aligned["open"].to_pylist(), exact["open"].to_pylist())
@@ -417,16 +506,18 @@ class FeatureStoreTests(unittest.TestCase):
                 ("2025-01-01T00:00:00Z", "2025-01-02T00:00:00Z"),
             ):
                 with self.subTest(alignment=alignment, start=start):
-                    relation = self.configured_store(
-                        ["ohlcv:close"],
-                        alignment=alignment,
-                        start=start,
-                        end=end,
-                    ).connection().table("features")
-
-                    self.assertEqual(
-                        relation.columns, ["datetime", "ticker", "close"]
+                    relation = (
+                        self.configured_store(
+                            ["ohlcv:close"],
+                            alignment=alignment,
+                            start=start,
+                            end=end,
+                        )
+                        .connection()
+                        .table("features")
                     )
+
+                    self.assertEqual(relation.columns, ["datetime", "ticker", "close"])
                     self.assertEqual(relation.aggregate("count(*)").fetchone(), (0,))
 
     def test_point_in_time_lookback_stays_within_family_coverage(self) -> None:
@@ -457,9 +548,7 @@ class FeatureStoreTests(unittest.TestCase):
             shutil.copytree(self.fixture_path, root, dirs_exist_ok=True)
             catalog_path = root / "catalog.json"
             catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-            catalog["datasets"][0]["path_template"] = (
-                "ohlcv/year={year}/*.parquet"
-            )
+            catalog["datasets"][0]["path_template"] = "ohlcv/year={year}/*.parquet"
             catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
 
             store = FeatureStore(
@@ -469,10 +558,13 @@ class FeatureStoreTests(unittest.TestCase):
                 **LOAD_ARGUMENTS,
             )
 
-            self.assertEqual(store.query("FROM features").fetchall(), [
-                (datetime(2024, 1, 2, 8, 0, tzinfo=UTC), "001", 100.5),
-                (datetime(2024, 1, 2, 8, 1, tzinfo=UTC), "001", 101.5),
-            ])
+            self.assertEqual(
+                store.query("FROM features").fetchall(),
+                [
+                    (datetime(2024, 1, 2, 8, 0, tzinfo=UTC), "001", 100.5),
+                    (datetime(2024, 1, 2, 8, 1, tzinfo=UTC), "001", 101.5),
+                ],
+            )
 
     def test_rejects_naive_query_timestamps(self) -> None:
         with self.assertRaisesRegex(ValueError, "must include a timezone offset"):
@@ -535,9 +627,12 @@ class FeatureStoreTests(unittest.TestCase):
         self.assertNotIn("ASOF_JOIN", plan)
 
     def test_registered_table_supports_relations_and_sql(self) -> None:
-        relation = self.store.connection().table("symbology").project(
-            "ticker, company_name"
-        ).filter("ticker = '001'")
+        relation = (
+            self.store.connection()
+            .table("symbology")
+            .project("ticker, company_name")
+            .filter("ticker = '001'")
+        )
 
         self.assertEqual(relation.columns, ["ticker", "company_name"])
         self.assertEqual(relation.fetchall(), [("001", "Example Company 001")])
@@ -628,9 +723,7 @@ class FeatureStoreTests(unittest.TestCase):
 
             rows = store.query("SELECT * FROM symbology").fetchall()
             repeated_rows = store.query("SELECT * FROM symbology").fetchall()
-            manifest = json.loads(
-                (cache / "manifest.json").read_text(encoding="utf-8")
-            )
+            manifest = json.loads((cache / "manifest.json").read_text(encoding="utf-8"))
             offline_store = FeatureStore(cache)
             offline_rows = offline_store.query("SELECT * FROM symbology").fetchall()
             offline_markets = offline_store.query("SELECT * FROM markets").fetchall()
@@ -642,9 +735,7 @@ class FeatureStoreTests(unittest.TestCase):
         self.assertEqual(offline_rows, rows)
         self.assertEqual(len(offline_markets), 2)
         self.assertEqual(
-            filesystem.opens.count(
-                "hf://datasets/owner/store/symbols/data.parquet"
-            ),
+            filesystem.opens.count("hf://datasets/owner/store/symbols/data.parquet"),
             1,
         )
         self.assertEqual(
@@ -808,7 +899,10 @@ class FeatureStoreTests(unittest.TestCase):
 
     def test_unsupported_catalog_versions_are_rejected(self) -> None:
         for version in (2, 3):
-            with self.subTest(version=version), tempfile.TemporaryDirectory() as directory:
+            with (
+                self.subTest(version=version),
+                tempfile.TemporaryDirectory() as directory,
+            ):
                 root = Path(directory)
                 (root / "catalog.json").write_text(
                     json.dumps({"catalog_version": version}), encoding="utf-8"
