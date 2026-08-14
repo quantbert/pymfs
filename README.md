@@ -1,15 +1,13 @@
 # pymfs (Python Minimal Feature Store)
 
-`pymfs` is a small Python library for retrieving features without the operational
-overhead of hosting yet another service. It reads data from Hugging Face datasets or
-buckets, local storage, and S3-compatible object stores.
+`pymfs` is an embedded, read-only offline feature store built on DuckDB and Parquet.
+
+`pymfs` is for retrieving features without the operational overhead of hosting yet
+another service. It reads data from Hugging Face datasets or buckets, local storage,
+and S3-compatible object stores.
 
 It provides the essentials for selecting features and reference data, preparing
 training datasets, and running common analytical queries.
-
-The library is for offline read operations. It does not calculate features. It does not
-provide an online database, ingestion control, or a registry service. Producers and
-`FeatureStore` use the catalog and the Parquet layout as their interface.
 
 There are no servers to deploy or maintain. A store is a catalog plus Parquet files.
 
@@ -22,6 +20,7 @@ Features include:
 - Streaming
 - Analytical SQL with direct access to DuckDB
 - Lazy feature and table relations with pandas and Arrow output
+
 
 ## Installation
 
